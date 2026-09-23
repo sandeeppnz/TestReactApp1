@@ -47,7 +47,7 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            '^/books': {
+            '^/enrollments': {
                 target,
                 secure: false
             }

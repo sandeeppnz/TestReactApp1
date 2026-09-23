@@ -1,116 +1,96 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './App.css';
 
-const emptyForm = { title: '', author: '' };
+const welcomeMessage = {
+    role: 'assistant',
+    text: 'Ask me about university enrollments, e.g. "How many students were in Business Administration?" or "students in Nursing last 5 years".'
+};
 
 function App() {
-    const [books, setBooks] = useState();
-    const [form, setForm] = useState(emptyForm);
-    const [editingId, setEditingId] = useState(null);
+    const [messages, setMessages] = useState([welcomeMessage]);
+    const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const bottomRef = useRef(null);
+    const historyRef = useRef([]);
 
     useEffect(() => {
-        populateBooks();
-    }, []);
-
-    async function populateBooks() {
-        const response = await fetch('/books');
-        if (response.ok) {
-            const data = await response.json();
-            setBooks(data);
-        }
-    }
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isLoading]);
 
     async function handleSubmit(event) {
         event.preventDefault();
 
-        if (editingId === null) {
-            await fetch('/books', {
+        const question = input.trim();
+        if (!question || isLoading) {
+            return;
+        }
+
+        setMessages(prev => [...prev, { role: 'user', text: question }]);
+        setInput('');
+        setIsLoading(true);
+
+        try {
+            const response = await fetch('/enrollments/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
+                body: JSON.stringify({ question, history: historyRef.current })
             });
-        } else {
-            await fetch(`/books/${editingId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(form)
-            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setMessages(prev => [...prev, { role: 'assistant', text: data.answer }]);
+                historyRef.current = [
+                    ...historyRef.current,
+                    { role: 'user', content: question },
+                    { role: 'assistant', content: data.answer }
+                ];
+            } else {
+                const error = await response.text();
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    text: `Sorry, something went wrong (HTTP ${response.status}). ${error}`.trim()
+                }]);
+            }
+        } catch (err) {
+            setMessages(prev => [...prev, { role: 'assistant', text: `Sorry, could not reach the server: ${err.message}` }]);
+        } finally {
+            setIsLoading(false);
         }
-
-        setForm(emptyForm);
-        setEditingId(null);
-        await populateBooks();
     }
 
-    function handleEdit(book) {
-        setEditingId(book.id);
-        setForm({ title: book.title, author: book.author });
+    function handleReset() {
+        setMessages([welcomeMessage]);
+        historyRef.current = [];
     }
-
-    function handleCancelEdit() {
-        setEditingId(null);
-        setForm(emptyForm);
-    }
-
-    async function handleDelete(id) {
-        await fetch(`/books/${id}`, { method: 'DELETE' });
-
-        if (editingId === id) {
-            handleCancelEdit();
-        }
-
-        await populateBooks();
-    }
-
-    const contents = books === undefined
-        ? <p><em>Loading... Please refresh once the ASP.NET backend has started.</em></p>
-        : <table className="table table-striped" aria-labelledby="tableLabel">
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {books.map(book =>
-                    <tr key={book.id}>
-                        <td>{book.title}</td>
-                        <td>{book.author}</td>
-                        <td>
-                            <button type="button" onClick={() => handleEdit(book)}>Edit</button>
-                            <button type="button" onClick={() => handleDelete(book.id)}>Delete</button>
-                        </td>
-                    </tr>
-                )}
-            </tbody>
-        </table>;
 
     return (
-        <div>
-            <h1 id="tableLabel">Library Books</h1>
-            <p>This component demonstrates fetching and managing books from the server.</p>
+        <div className="chat-app">
+            <h1>Enrollment Assistant</h1>
+            <p>
+                Ask a question about enrollment data in plain English. Follow-up questions are supported.{' '}
+                <button type="button" onClick={handleReset} disabled={isLoading}>New conversation</button>
+            </p>
 
-            <form onSubmit={handleSubmit}>
+            <div className="chat-window">
+                {messages.map((message, index) =>
+                    <div key={index} className={`chat-bubble ${message.role}`}>
+                        {message.text}
+                    </div>
+                )}
+                {isLoading && <div className="chat-bubble assistant loading">Thinking…</div>}
+                <div ref={bottomRef} />
+            </div>
+
+            <form className="chat-input" onSubmit={handleSubmit}>
                 <input
                     type="text"
-                    placeholder="Title"
-                    value={form.title}
-                    onChange={e => setForm({ ...form, title: e.target.value })}
-                    required
+                    placeholder="Ask a question…"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    disabled={isLoading}
                 />
-                <input
-                    type="text"
-                    placeholder="Author"
-                    value={form.author}
-                    onChange={e => setForm({ ...form, author: e.target.value })}
-                    required
-                />
-                <button type="submit">{editingId === null ? 'Add Book' : 'Save Changes'}</button>
-                {editingId !== null && <button type="button" onClick={handleCancelEdit}>Cancel</button>}
+                <button type="submit" disabled={isLoading || !input.trim()}>Send</button>
             </form>
-
-            {contents}
         </div>
     );
 }
