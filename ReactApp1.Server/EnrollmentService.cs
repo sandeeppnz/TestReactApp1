@@ -1,5 +1,7 @@
 using System.ClientModel;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using System.Data;
 using Dapper;
@@ -28,11 +30,18 @@ public class Enrollment
     public required int StudentCount { get; set; }
 }
 
+public record EnrollmentDataPoint(int Year, string Programme, string Faculty, int StudentCount);
+
 public class EnrollmentQueryResult
 {
     public required string Question { get; set; }
 
     public required string Answer { get; set; }
+
+    /// <summary>"table", "line", "bar", or "none" — a hint for how the frontend should visualize <see cref="Rows"/>.</summary>
+    public string ChartType { get; set; } = "none";
+
+    public List<EnrollmentDataPoint> Rows { get; set; } = [];
 }
 
 public class EnrollmentService : IEnrollmentService
@@ -148,6 +157,34 @@ public class EnrollmentService : IEnrollmentService
 
     private const int MaxHistoryTurns = 10;
 
+    private static readonly BinaryData ResponseJsonSchema = BinaryData.FromBytes("""
+        {
+          "type": "object",
+          "properties": {
+            "answer": { "type": "string" },
+            "chartType": { "type": "string", "enum": ["table", "line", "bar", "none"] },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "year": { "type": "integer" },
+                  "programme": { "type": "string" },
+                  "faculty": { "type": "string" },
+                  "studentCount": { "type": "integer" }
+                },
+                "required": ["year", "programme", "faculty", "studentCount"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["answer", "chartType", "rows"],
+          "additionalProperties": false
+        }
+        """u8.ToArray());
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<EnrollmentQueryResult> AnswerQuestionAsync(string question, IReadOnlyList<ChatTurn>? history)
     {
         var apiKey = _configuration["OpenRouter:ApiKey"];
@@ -172,7 +209,13 @@ public class EnrollmentService : IEnrollmentService
             "Perform any counting, summing, or comparison yourself from the raw rows. " +
             "The conversation may include earlier questions and answers — use them to resolve follow-up questions " +
             "(e.g. pronouns, \"what about ...\", implied subjects), but always re-derive numbers from the records above rather than trusting prior answers. " +
-            "If the question cannot be answered from this data, say so clearly. Keep answers concise (1-3 sentences).\n\n" +
+            "If the question cannot be answered from this data, say so clearly. Keep the 'answer' text concise (1-3 sentences).\n\n" +
+            "You must also respond with the structured fields 'chartType' and 'rows':\n" +
+            "- 'rows' must be the exact matching records (verbatim subset of the data above, not invented) that support your answer.\n" +
+            "- 'chartType' = \"line\" when rows span multiple years for the same programme/faculty (a trend over time); " +
+            "\"bar\" when comparing multiple programmes/faculties at one point in time; " +
+            "\"table\" for a detailed multi-row breakdown that isn't a simple trend or comparison; " +
+            "\"none\" when the answer is a single value or 'rows' has 0 or 1 entries.\n\n" +
             "Enrollment records:\n" + context;
 
         var messages = new List<ChatMessage> { new SystemChatMessage(systemPrompt) };
@@ -194,16 +237,40 @@ public class EnrollmentService : IEnrollmentService
             new ApiKeyCredential(apiKey),
             new OpenAIClientOptions { Endpoint = OpenRouterEndpoint });
 
+        var options = new ChatCompletionOptions
+        {
+            ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
+                "enrollment_answer",
+                ResponseJsonSchema,
+                jsonSchemaIsStrict: true)
+        };
+
         try
         {
-            var completion = await chatClient.CompleteChatAsync(messages);
+            var completion = await chatClient.CompleteChatAsync(messages, options);
+            var raw = completion.Value.Content.FirstOrDefault()?.Text;
 
-            var answer = completion.Value.Content.FirstOrDefault()?.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return new EnrollmentQueryResult { Question = question, Answer = "The AI assistant did not return an answer." };
+            }
+
+            var parsed = JsonSerializer.Deserialize<LlmResponse>(raw, JsonOptions);
+
+            if (parsed is null || string.IsNullOrWhiteSpace(parsed.Answer))
+            {
+                return new EnrollmentQueryResult { Question = question, Answer = "The AI assistant did not return an answer." };
+            }
+
+            var chartType = parsed.ChartType is "table" or "line" or "bar" ? parsed.ChartType : "none";
+            var rows = parsed.Rows ?? [];
 
             return new EnrollmentQueryResult
             {
                 Question = question,
-                Answer = string.IsNullOrWhiteSpace(answer) ? "The AI assistant did not return an answer." : answer
+                Answer = parsed.Answer.Trim(),
+                ChartType = rows.Count > 1 ? chartType : "none",
+                Rows = rows
             };
         }
         catch (Exception ex)
@@ -215,6 +282,8 @@ public class EnrollmentService : IEnrollmentService
             };
         }
     }
+
+    private sealed record LlmResponse(string Answer, string ChartType, List<EnrollmentDataPoint>? Rows);
 
     private static string BuildContext(List<Enrollment> enrollments)
     {
