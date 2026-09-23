@@ -1,5 +1,5 @@
 #root {
-    max-width: 640px;
+    max-width: 720px;
     margin: 0 auto;
     padding: 2rem;
     text-align: center;
@@ -24,8 +24,25 @@
     text-align: left;
 }
 
-.chat-bubble {
+.chat-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.chat-row.user {
+    align-self: flex-end;
+    align-items: flex-end;
     max-width: 80%;
+}
+
+.chat-row.assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+    max-width: 100%;
+}
+
+.chat-bubble {
     padding: 0.6rem 0.9rem;
     border-radius: 0.9rem;
     line-height: 1.4;
@@ -33,22 +50,60 @@
 }
 
 .chat-bubble.user {
-    align-self: flex-end;
     background: #2563eb;
     color: #fff;
     border-bottom-right-radius: 0.2rem;
 }
 
 .chat-bubble.assistant {
-    align-self: flex-start;
     background: #f1f1f1;
     color: #111;
     border-bottom-left-radius: 0.2rem;
+    max-width: 80%;
 }
 
 .chat-bubble.loading {
     font-style: italic;
     color: #666;
+    align-self: flex-start;
+}
+
+.viz-container {
+    width: 100%;
+    max-width: 480px;
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 0.6rem;
+    padding: 0.5rem;
+}
+
+.viz-chart {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.viz-scroll {
+    overflow-x: auto;
+}
+
+.viz-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.viz-table th,
+.viz-table td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.viz-table th {
+    background: #f8f8f8;
+    font-weight: 600;
 }
 
 .chat-input {

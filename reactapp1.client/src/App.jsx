@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './App.css';
+import { EnrollmentViz } from './EnrollmentViz';
 
 const welcomeMessage = {
     role: 'assistant',
@@ -38,7 +39,12 @@ function App() {
 
             if (response.ok) {
                 const data = await response.json();
-                setMessages(prev => [...prev, { role: 'assistant', text: data.answer }]);
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    text: data.answer,
+                    chartType: data.chartType,
+                    rows: data.rows
+                }]);
                 historyRef.current = [
                     ...historyRef.current,
                     { role: 'user', content: question },
@@ -73,8 +79,10 @@ function App() {
 
             <div className="chat-window">
                 {messages.map((message, index) =>
-                    <div key={index} className={`chat-bubble ${message.role}`}>
-                        {message.text}
+                    <div key={index} className={`chat-row ${message.role}`}>
+                        <div className={`chat-bubble ${message.role}`}>{message.text}</div>
+                        {message.role === 'assistant' &&
+                            <EnrollmentViz chartType={message.chartType} rows={message.rows} />}
                     </div>
                 )}
                 {isLoading && <div className="chat-bubble assistant loading">Thinking…</div>}
