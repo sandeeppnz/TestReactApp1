@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.OpenApi.Models;
 using ReactApp1.Server.Data;
+using ReactApp1.Server.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
 

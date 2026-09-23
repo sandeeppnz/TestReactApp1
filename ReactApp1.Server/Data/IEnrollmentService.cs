@@ -1,6 +1,9 @@
-namespace ReactApp1.Server.Data;
+using ReactApp1.Server.Domain;
 
-public interface IEnrollmentService
+namespace ReactApp1.Server.Data
 {
-    Task<EnrollmentQueryResult> AnswerQuestionAsync(string question, IReadOnlyList<ChatTurn>? history);
+    public interface IEnrollmentService
+    {
+        Task<EnrollmentQueryResult> AnswerQuestionAsync(string question, IReadOnlyList<ChatTurn>? history);
+    }
 }
