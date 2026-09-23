@@ -1,50 +1,15 @@
-using System.ClientModel;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Microsoft.Data.Sqlite;
-using System.Data;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
+using System.Data;
+using System.Text;
+using System.Text.Json;
 
-namespace ReactApp1.Server;
+namespace ReactApp1.Server.Data;
 
-public interface IEnrollmentService
-{
-    Task<EnrollmentQueryResult> AnswerQuestionAsync(string question, IReadOnlyList<ChatTurn>? history);
-}
-
-public record ChatTurn(string Role, string Content);
-
-public class Enrollment
-{
-    public int Id { get; set; }
-
-    public required int Year { get; set; }
-
-    public required string Programme { get; set; }
-
-    public required string Faculty { get; set; }
-
-    public required int StudentCount { get; set; }
-}
-
-public record EnrollmentDataPoint(int Year, string Programme, string Faculty, int StudentCount);
-
-public class EnrollmentQueryResult
-{
-    public required string Question { get; set; }
-
-    public required string Answer { get; set; }
-
-    /// <summary>"table", "line", "bar", or "none" — a hint for how the frontend should visualize <see cref="Rows"/>.</summary>
-    public string ChartType { get; set; } = "none";
-
-    public List<EnrollmentDataPoint> Rows { get; set; } = [];
-}
-
-public class EnrollmentService : IEnrollmentService
+public partial class EnrollmentService : IEnrollmentService
 {
     private static readonly Uri OpenRouterEndpoint = new("https://openrouter.ai/api/v1");
 
@@ -282,8 +247,6 @@ public class EnrollmentService : IEnrollmentService
             };
         }
     }
-
-    private sealed record LlmResponse(string Answer, string ChartType, List<EnrollmentDataPoint>? Rows);
 
     private static string BuildContext(List<Enrollment> enrollments)
     {
